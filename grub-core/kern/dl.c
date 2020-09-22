@@ -234,7 +234,7 @@ grub_dl_load_segments (grub_dl_t mod, const Elf_Ehdr *e)
   unsigned i;
   const Elf_Shdr *s;
   grub_size_t tsize = 0, talign = 1;
-#if !defined (__i386__) && !defined (__x86_64__)
+#if !defined (__i386__) && !defined (__x86_64__) && !defined(__riscv)
   grub_size_t tramp;
   grub_size_t got;
   grub_err_t err;
@@ -250,7 +250,7 @@ grub_dl_load_segments (grub_dl_t mod, const Elf_Ehdr *e)
 	talign = s->sh_addralign;
     }
 
-#if !defined (__i386__) && !defined (__x86_64__)
+#if !defined (__i386__) && !defined (__x86_64__) && !defined(__riscv)
   err = grub_arch_dl_get_tramp_got_size (e, &tramp, &got);
   if (err)
     return err;
@@ -313,7 +313,7 @@ grub_dl_load_segments (grub_dl_t mod, const Elf_Ehdr *e)
 	  mod->segment = seg;
 	}
     }
-#if !defined (__i386__) && !defined (__x86_64__)
+#if !defined (__i386__) && !defined (__x86_64__) && !defined(__riscv)
   ptr = (char *) ALIGN_UP ((grub_addr_t) ptr, GRUB_ARCH_DL_TRAMP_ALIGN);
   mod->tramp = ptr;
   mod->trampptr = ptr;
@@ -706,7 +706,7 @@ grub_dl_load_file (const char *filename)
 
   grub_boot_time ("Loading module %s", filename);
 
-  file = grub_file_open (filename);
+  file = grub_file_open (filename, GRUB_FILE_TYPE_GRUB_MODULE);
   if (! file)
     return 0;
 
@@ -730,7 +730,7 @@ grub_dl_load_file (const char *filename)
      opens of the same device.  */
   grub_file_close (file);
 
-  grub_tpm_measure(core, size, GRUB_BINARY_PCR, "grub_module", filename);
+  grub_tpm_measure(core, size, GRUB_BINARY_PCR, filename);
   grub_print_error();
 
   mod = grub_dl_load_core (core, size);

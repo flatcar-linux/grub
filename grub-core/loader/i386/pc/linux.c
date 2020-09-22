@@ -122,7 +122,7 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
 		int argc, char *argv[])
 {
   grub_file_t file = 0;
-  struct linux_kernel_header lh;
+  struct linux_i386_kernel_header lh;
   grub_uint8_t setup_sects;
   grub_size_t real_size, kernel_offset = 0;
   grub_ssize_t len;
@@ -141,7 +141,7 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
       goto fail;
     }
 
-  file = grub_file_open (argv[0]);
+  file = grub_file_open (argv[0], GRUB_FILE_TYPE_LINUX_KERNEL);
   if (! file)
     goto fail;
 
@@ -161,8 +161,9 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
       goto fail;
     }
 
-  grub_tpm_measure (kernel, len, GRUB_BINARY_PCR, "grub_linux16", "Kernel");
-  grub_print_error();
+  // TODO figure out the GRUB_VERIFY_ equivalent for this one
+  //grub_tpm_measure (kernel, len, GRUB_BINARY_PCR, "Kernel");
+  //grub_print_error();
 
   grub_memcpy (&lh, kernel, sizeof (lh));
   kernel_offset = sizeof (lh);
@@ -185,7 +186,7 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
 
   maximal_cmdline_size = 256;
 
-  if (lh.header == grub_cpu_to_le32_compile_time (GRUB_LINUX_MAGIC_SIGNATURE)
+  if (lh.header == grub_cpu_to_le32_compile_time (GRUB_LINUX_I386_MAGIC_SIGNATURE)
       && grub_le_to_cpu16 (lh.version) >= 0x0200)
     {
       grub_linux_is_bzimage = (lh.loadflags & GRUB_LINUX_FLAG_BIG_KERNEL);
@@ -252,10 +253,6 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
 		(unsigned) real_size,
 		(unsigned) grub_linux16_prot_size);
 
-  relocator = grub_relocator_new ();
-  if (!relocator)
-    goto fail;
-
   for (i = 1; i < argc; i++)
     if (grub_memcmp (argv[i], "vga=", 4) == 0)
       {
@@ -315,6 +312,10 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
 	  }
       }
 
+  relocator = grub_relocator_new ();
+  if (!relocator)
+    goto fail;
+
   {
     grub_relocator_chunk_t ch;
     err = grub_relocator_alloc_chunk_addr (relocator, &ch,
@@ -334,7 +335,7 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
 	       len);
   kernel_offset += len;
 
-  if (lh.header != grub_cpu_to_le32_compile_time (GRUB_LINUX_MAGIC_SIGNATURE)
+  if (lh.header != grub_cpu_to_le32_compile_time (GRUB_LINUX_I386_MAGIC_SIGNATURE)
       || grub_le_to_cpu16 (lh.version) < 0x0200)
     /* Clear the heap space.  */
     grub_memset (grub_linux_real_chunk
@@ -346,11 +347,14 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
   /* Create kernel command line.  */
   grub_memcpy ((char *)grub_linux_real_chunk + GRUB_LINUX_CL_OFFSET,
 		LINUX_IMAGE, sizeof (LINUX_IMAGE));
-  grub_create_loader_cmdline (argc, argv,
-			      (char *)grub_linux_real_chunk
-			      + GRUB_LINUX_CL_OFFSET + sizeof (LINUX_IMAGE) - 1,
-			      maximal_cmdline_size
-			      - (sizeof (LINUX_IMAGE) - 1));
+  err = grub_create_loader_cmdline (argc, argv,
+				    (char *)grub_linux_real_chunk
+				    + GRUB_LINUX_CL_OFFSET + sizeof (LINUX_IMAGE) - 1,
+				    maximal_cmdline_size
+				    - (sizeof (LINUX_IMAGE) - 1),
+				    GRUB_VERIFY_KERNEL_CMDLINE);
+  if (err)
+    goto fail;
 
   if (grub_linux_is_bzimage)
     grub_linux_prot_target = GRUB_LINUX_BZIMAGE_ADDR;
@@ -367,8 +371,9 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
   }
 
   len = grub_linux16_prot_size;
-  grub_memcpy (grub_linux_prot_chunk, kernel + kernel_offset, len);
-  kernel_offset += len;
+  if (grub_file_read (file, grub_linux_prot_chunk, len) != len && !grub_errno)
+    grub_error (GRUB_ERR_BAD_OS, N_("premature end of file %s"),
+		argv[0]);
 
   if (grub_errno == GRUB_ERR_NONE)
     {
@@ -399,7 +404,7 @@ grub_cmd_initrd (grub_command_t cmd __attribute__ ((unused)),
 {
   grub_size_t size = 0;
   grub_addr_t addr_max, addr_min;
-  struct linux_kernel_header *lh;
+  struct linux_i386_kernel_header *lh;
   grub_uint8_t *initrd_chunk;
   grub_addr_t initrd_addr;
   grub_err_t err;
@@ -417,9 +422,9 @@ grub_cmd_initrd (grub_command_t cmd __attribute__ ((unused)),
       goto fail;
     }
 
-  lh = (struct linux_kernel_header *) grub_linux_real_chunk;
+  lh = (struct linux_i386_kernel_header *) grub_linux_real_chunk;
 
-  if (!(lh->header == grub_cpu_to_le32_compile_time (GRUB_LINUX_MAGIC_SIGNATURE)
+  if (!(lh->header == grub_cpu_to_le32_compile_time (GRUB_LINUX_I386_MAGIC_SIGNATURE)
 	&& grub_le_to_cpu16 (lh->version) >= 0x0200))
     {
       grub_error (GRUB_ERR_BAD_OS, "the kernel is too old for initrd");

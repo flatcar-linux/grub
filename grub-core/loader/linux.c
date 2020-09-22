@@ -174,7 +174,6 @@ grub_initrd_init (int argc, char *argv[],
 	  eptr = grub_strchr (ptr, ':');
 	  if (eptr)
 	    {
-	      grub_file_filter_disable_compression ();
 	      initrd_ctx->components[i].newc_name = grub_strndup (ptr, eptr - ptr);
 	      if (!initrd_ctx->components[i].newc_name)
 		{
@@ -199,8 +198,9 @@ grub_initrd_init (int argc, char *argv[],
 	  root = 0;
 	  newc = 0;
 	}
-      grub_file_filter_disable_compression ();
-      initrd_ctx->components[i].file = grub_file_open (fname);
+      initrd_ctx->components[i].file = grub_file_open (fname,
+						       GRUB_FILE_TYPE_LINUX_INITRD
+						       | GRUB_FILE_TYPE_NO_DECOMPRESS);
       if (!initrd_ctx->components[i].file)
 	{
 	  grub_initrd_close (initrd_ctx);
@@ -289,8 +289,9 @@ grub_initrd_load (struct grub_linux_initrd_context *initrd_ctx,
 	  grub_initrd_close (initrd_ctx);
 	  return grub_errno;
 	}
-      grub_tpm_measure (ptr, cursize, GRUB_BINARY_PCR, "grub_initrd", "Initrd");
-      grub_print_error();
+      // TODO figure out the GRUB_VERIFY_ equivalent for this one
+      //grub_tpm_measure (ptr, cursize, GRUB_BINARY_PCR, "Initrd");
+      //grub_print_error();
 
       ptr += cursize;
     }
